@@ -1,0 +1,85 @@
+spring:
+  application:
+    name: ticketrush
+  config:
+    # Secret đọc từ file .env ở gốc repo (tạo bằng scripts/init-env.sh), không commit vào git.
+    # Chạy từ STS hoặc ./mvnw -pl app thì thư mục làm việc là app/, nên thử cả ../.env
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ticketrush
+    username: ticketrush
+    password: ticketrush
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none        # Flyway quản lý schema
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      properties:
+        # Kafka sập thì relay báo lỗi sau vài giây thay vì treo 60 giây
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      auto-offset-reset: earliest
+      properties:
+        # App bị kill -9 thì consumer cũ còn "sống" trong group đến hết session timeout (mặc định 45s),
+        # consumer mới phải chờ chừng đó mới nhận partition. 10s để khởi động lại nhanh hơn.
+        session.timeout.ms: 10000
+  mail:
+    host: localhost
+    port: 1025
+  task:
+    scheduling:
+      pool:
+        size: 4             # job hết hạn, hoàn tiền, relay không chờ nhau
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+ticketrush:
+  jobs:
+    enabled: true                 # tắt trong test để tự gọi job bằng tay
+  order:
+    hold-duration: PT10M          # giữ chỗ 10 phút
+    expiry-grace: PT1M            # chờ thêm 1 phút trước khi dọn đơn hết hạn
+    payment-extension: PT15M      # gia hạn giữ chỗ khi bắt đầu thanh toán
+    max-payment-attempts: 3
+  payment:
+    mockpay:
+      base-url: http://localhost:9090
+      api-key: ${MOCKPAY_API_KEY}
+      webhook-secret: ${MOCKPAY_WEBHOOK_SECRET}
+      return-url: http://localhost:8080/payments/return
+      notify-url: http://localhost:8080/webhooks/payments/mockpay
+      connect-timeout: PT2S
+      read-timeout: PT5S
+  outbox:
+    relay:
+      enabled: true
+      interval: PT0.5S
+    retention: P7D                # xoá outbox đã gửi sau 7 ngày
+  ticket:
+    transfer-cutoff: PT2H         # không cho chuyển nhượng trong 2 giờ trước giờ diễn
+  qr:
+    active-key-id: k1
+    private-key: ${QR_PRIVATE_KEY}        # Ed25519 PKCS#8 DER, base64
+    public-keys:
+      k1: ${QR_PUBLIC_KEY}                # Ed25519 X.509 DER, base64
+  jwt:
+    secret: ${JWT_SECRET}                 # HMAC-SHA256, tối thiểu 32 byte
+    issuer: ticketrush
+    ttl: PT1H
+  notification:
+    from: "TicketRush <no-reply@ticketrush.local>"
+    public-base-url: http://localhost:8080

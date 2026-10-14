@@ -1,0 +1,29 @@
+# Hạ tầng chạy local: docker compose up -d
+# Kafka chỉ cần từ M3. MockPay và TicketRush chạy từ IDE (hoặc ./mvnw), không nằm trong compose.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ticketrush
+      POSTGRES_USER: ticketrush
+      POSTGRES_PASSWORD: ticketrush
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketrush -d ticketrush"]
+      interval: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.3.1
+    ports: ["9092:9092"]
+    # Cấu hình mặc định của image này chạy 1 node KRaft, lắng nghe localhost:9092
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # giao diện xem email: http://localhost:8025
+
+volumes:
+  pgdata:
